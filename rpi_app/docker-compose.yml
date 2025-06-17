@@ -1,0 +1,33 @@
+version: '3.9'
+services:
+  camera_capture:
+    build: ./camera_capture
+    restart: always
+    volumes:
+      - shared_data:/data
+    devices:
+      - "/dev/video0:/dev/video0"
+  
+  cloud_uploader:
+    build: ./cloud_uploader
+    restart: always
+    depends_on:
+      - camera_capture
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/gcp/key.json
+      - GCP_BUCKET_NAME=sweetroll-bucket
+    volumes:
+      - shared_data:/data
+      - gcp_creds:/gcp:ro
+
+  api_gateway:
+    build: ./api_gateway
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - shared_data:/data
+
+volumes:
+  shared_data:
+  gcp_creds:
