@@ -17,6 +17,9 @@
             ]
         }
     },
+    "containerEnv": {
+        "PYTHONPATH": "rpi_app/camera_capture/:"
+    },
     "postCreateCommand": "pip install --upgrade pip && pip install -r requirements.txt",
     "mounts": [
         "source=${localWorkspaceFolder}/.gcp,target=/workspace/.gcp,type=bind"
