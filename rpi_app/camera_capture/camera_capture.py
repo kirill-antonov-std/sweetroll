@@ -1,25 +1,33 @@
+from __future__ import annotations
+from dataclasses import dataclass
 from datetime import datetime
+from threading import Thread
 from typing import Optional
 from enum import Enum
+import logging
 import time
 import cv2
+import sys
 import os
+
+from camera_capture_config import CameraCaptureConfig, CaptureTrigger
+
+logger = logging.getLogger(__name__)
 
 class CameraAdapter():
 
     FRAME_RATE = 1 / 60
 
-    class CaptureTrigger(Enum):
-        TIMER_TRIGGER = 0
-        DI_TRIGGER = 1
-
-    def __init__(self, camera_handle: str, capture_trigger: CaptureTrigger):
-        self.camera_capture: cv2.VideoCapture = self._create_camera_capture(camera_handle=camera_handle, 
-                                                                            capture_trigger=capture_trigger)
-        self.CAMERA_HANDLE: str = camera_handle
-        self.CAPTURE_TRIGGER: CameraAdapter.CaptureTrigger = capture_trigger
+    def __init__(self, config: CameraCaptureConfig):
+        self.camera_capture: cv2.VideoCapture = self._create_camera_capture(
+            camera_handle=config.camera_handle, 
+            capture_trigger=config.capture_trigger
+        )
+        self.CAMERA_HANDLE: str = config.camera_handle
+        self.CAPTURE_TRIGGER: CaptureTrigger = config.capture_trigger
         self.CAPTURE_INTERVAL_MS: int = None
         self.CAPTURE_TRIGGER_DI: int = None
+        self._capturing_tread: Thread = Thread(target=self._capture_loop)
 
     def _create_camera_capture(self, camera_handle: str, 
                                capture_trigger: CaptureTrigger) -> Optional[cv2.VideoCapture]:
@@ -55,12 +63,30 @@ class CameraAdapter():
             ret_val = frame
         return ret_val
     
-    def close(self) -> bool:
+    def start_continuous_capturing(self) -> bool:
+        self._capturing_tread.start()
+
+    def stop_continuous_capturing(self) -> bool:
         self._release_camera_capture()
 
-if __name__ == "__main__":
+def run_module() -> None:        
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s",
+        datefmt="%d-%m-%Y %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
 
-    CAMERA_DEVICE = os.getenv("CAMERA_DEVICE")
-    CAPTURE_INTERVAL = int(os.getenv("CAPTURE_INTERVAL", 60))
-    SAVE_DIR = os.getenv("SAVE_DIR")
-    os.makedirs(SAVE_DIR, exist_ok=True)
+    config = CameraCaptureConfig.from_env()
+    if not os.path.exists(config.images_dir):
+        os.makedirs(name=config.images_dir)
+        logger.info(f"The directory for images is created by path {config.images_dir}")
+
+    camera = CameraAdapter(config=config)
+    camera.start_continuous_capturing()
+
+    while True:
+        time.sleep(0.5)
+
+if __name__ == "__main__":
+    run_module()
