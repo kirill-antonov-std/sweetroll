@@ -30,15 +30,15 @@ class CameraAdapter():
             self.CAPTURE_TRIGGER_DI: int = config.capture_trigger_di
         self.IMAGES_DIR = config.images_dir
         self._trigger_checker = TRIGGER_CHECKERS[self.CAPTURE_TRIGGER]
-        self._capturing_tread: threading.Thread = threading.Thread(target=self._capture_loop)
+        self._capturing_thread: threading.Thread = threading.Thread(target=self._capture_loop)
         self._stop_event = threading.Event()
 
     def _create_camera_capture(self, camera_handle: str) -> Optional[cv2.VideoCapture]:
         cap: Optional[cv2.VideoCapture] = None
         try:
             cap = cv2.VideoCapture(camera_handle)
-        except:
-            raise RuntimeError(f"Failed to create the video capture ({camera_handle})")
+        except Exception as e:
+            raise RuntimeError(f"Failed to create the video capture ({camera_handle})") from e
         if not cap.isOpened():
             raise RuntimeError(f"Failed to open the video capture ({camera_handle})")
         return cap
@@ -73,16 +73,18 @@ class CameraAdapter():
         if status is True:
             ret_val = frame
         else:
-            self.camera_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            if self.CAMERA_HANDLE.endswith((".mp4", ".avi")):
+                self.camera_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
         return ret_val
     
     def start_continuous_capturing(self) -> bool:
-        self._capturing_tread.start()
+        self._capturing_thread.start()
+        return self._capturing_thread.is_alive()
 
     def stop_continuous_capturing(self) -> bool:
         self._stop_event.set()
-        self._capturing_tread.join()
-        self._release_camera_capture()
+        self._capturing_thread.join()
+        return self._release_camera_capture()
 
 def run_module() -> None:        
     logging.basicConfig(
@@ -111,13 +113,4 @@ def run_module() -> None:
     camera.stop_continuous_capturing()
 
 if __name__ == "__main__":
-    default_env_vars_timer = {
-        "CAMERA_HANDLE": "rpi_app/camera_capture/tests/camera_fake.mp4",
-        "CAPTURE_TRIGGER": "timer",
-        "CAPTURE_INTERVAL_S": "2",
-        "CAPTURE_TRIGGER_DI": "12",
-        "IMAGES_DIR": "/workspaces/sweetroll/rpi_app/camera_capture/images"
-    }
-    os.environ.update(default_env_vars_timer)
-
     run_module()

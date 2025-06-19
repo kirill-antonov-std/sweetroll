@@ -13,23 +13,29 @@ class CaptureTrigger(Enum):
     TIMER_TRIGGER = "timer"
     DI_TRIGGER = "di"
 
-def check_timer_trigger(config: CameraCaptureConfig) -> bool:
-    ret_val = False
-    new_ts = datetime.now()
-    if (new_ts - check_timer_trigger.old_ts).total_seconds() > config.capture_interval_s:
-        check_timer_trigger.old_ts = new_ts
-        ret_val = True
-    return ret_val
-check_timer_trigger.old_ts = datetime.now()
+class TimerTriggerChecker:
+    def __init__(self):
+        self._last_trigger_time = datetime.now()
 
-def check_di_trigger(config: CameraCaptureConfig) -> bool:
-    ret_val = True
-    return ret_val
+    def check(self, config) -> bool:
+        ret_val = False
+        now = datetime.now()
+        if (now - self._last_trigger_time).total_seconds() > config.capture_interval_s:
+            self._last_trigger_time = now
+            ret_val = True
+        return ret_val
+    
+class DiTriggerChecker:
+    def __init__(self):
+        pass
 
+    def check(self, config) -> bool:
+        raise NotImplementedError
+    
 TRIGGER_CHECKERS = {
     CaptureTrigger.UNKNOWN: None,
-    CaptureTrigger.TIMER_TRIGGER: check_timer_trigger,
-    CaptureTrigger.DI_TRIGGER: check_di_trigger
+    CaptureTrigger.TIMER_TRIGGER: TimerTriggerChecker().check,
+    CaptureTrigger.DI_TRIGGER: DiTriggerChecker().check
 }
 
 @dataclass
