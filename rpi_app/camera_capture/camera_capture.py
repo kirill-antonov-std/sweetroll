@@ -1,43 +1,46 @@
 from __future__ import annotations
-from dataclasses import dataclass
 from datetime import datetime
-from threading import Thread
 from typing import Optional
-from enum import Enum
+import threading
 import logging
+import signal
 import time
 import cv2
 import sys
 import os
 
-from camera_capture_config import CameraCaptureConfig, CaptureTrigger
+from camera_capture_config import CameraCaptureConfig, CaptureTrigger, TRIGGER_CHECKERS
 
 logger = logging.getLogger(__name__)
 
 class CameraAdapter():
 
-    FRAME_RATE = 1 / 60
+    FRAME_RATE_S = 1 / 60
 
     def __init__(self, config: CameraCaptureConfig):
         self.camera_capture: cv2.VideoCapture = self._create_camera_capture(
-            camera_handle=config.camera_handle, 
-            capture_trigger=config.capture_trigger
+            camera_handle=config.camera_handle
         )
+        self.CONFIG = config
         self.CAMERA_HANDLE: str = config.camera_handle
         self.CAPTURE_TRIGGER: CaptureTrigger = config.capture_trigger
-        self.CAPTURE_INTERVAL_MS: int = None
-        self.CAPTURE_TRIGGER_DI: int = None
-        self._capturing_tread: Thread = Thread(target=self._capture_loop)
+        if config.capture_interval_s is not None:
+            self.CAPTURE_INTERVAL_S: int = config.capture_interval_s
+        if config.capture_trigger_di is not None:
+            self.CAPTURE_TRIGGER_DI: int = config.capture_trigger_di
+        self.IMAGES_DIR = config.images_dir
+        self._trigger_checker = TRIGGER_CHECKERS[self.CAPTURE_TRIGGER]
+        self._capturing_tread: threading.Thread = threading.Thread(target=self._capture_loop)
+        self._stop_event = threading.Event()
 
-    def _create_camera_capture(self, camera_handle: str, 
-                               capture_trigger: CaptureTrigger) -> Optional[cv2.VideoCapture]:
+    def _create_camera_capture(self, camera_handle: str) -> Optional[cv2.VideoCapture]:
         cap: Optional[cv2.VideoCapture] = None
         try:
             cap = cv2.VideoCapture(camera_handle)
         except:
-            pass
+            raise RuntimeError(f"Failed to create the video capture ({camera_handle})")
         if not cap.isOpened():
-            cap = None
+            raise RuntimeError(f"Failed to open the video capture ({camera_handle})")
         return cap
     
     def _release_camera_capture(self) -> bool:
@@ -51,22 +54,34 @@ class CameraAdapter():
         return True
     
     def _capture_loop(self) -> None:
-        while True:
-            if self._check_trigger():
-                self.get_image()
-            time.sleep(self.FRAME_RATE)
+        while not self._stop_event.is_set():
+            if self._trigger_checker(self.CONFIG):
+                image = self.get_image()
+                ts = datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
+                image_name = f"{self.IMAGES_DIR}/cap_{ts}.jpg"
+                status = cv2.imwrite(image_name, image)
+                if status:
+                    logging.info(f"The image {image_name} has successfully captured")
+                else:
+                    logging.warning(f"Failed to save the image into the {self.IMAGES_DIR} folder")
+
+            time.sleep(self.FRAME_RATE_S)
     
     def get_image(self) -> Optional[cv2.typing.MatLike]:
         ret_val: Optional[cv2.typing.MatLike] = None
         status, frame = self.camera_capture.read()
         if status is True:
             ret_val = frame
+        else:
+            self.camera_capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
         return ret_val
     
     def start_continuous_capturing(self) -> bool:
         self._capturing_tread.start()
 
     def stop_continuous_capturing(self) -> bool:
+        self._stop_event.set()
+        self._capturing_tread.join()
         self._release_camera_capture()
 
 def run_module() -> None:        
@@ -76,6 +91,12 @@ def run_module() -> None:
         datefmt="%d-%m-%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)]
     )
+    shutdown_event = threading.Event()
+    def handle_shutdown(signum, frame):
+        logger.info(f"Received signal {signum}. Shutting down...")
+        shutdown_event.set()
+    signal.signal(signal.SIGTERM, handle_shutdown)
+    signal.signal(signal.SIGINT, handle_shutdown)
 
     config = CameraCaptureConfig.from_env()
     if not os.path.exists(config.images_dir):
@@ -85,8 +106,18 @@ def run_module() -> None:
     camera = CameraAdapter(config=config)
     camera.start_continuous_capturing()
 
-    while True:
+    while not shutdown_event.is_set():
         time.sleep(0.5)
+    camera.stop_continuous_capturing()
 
 if __name__ == "__main__":
+    default_env_vars_timer = {
+        "CAMERA_HANDLE": "rpi_app/camera_capture/tests/camera_fake.mp4",
+        "CAPTURE_TRIGGER": "timer",
+        "CAPTURE_INTERVAL_S": "2",
+        "CAPTURE_TRIGGER_DI": "12",
+        "IMAGES_DIR": "/workspaces/sweetroll/rpi_app/camera_capture/images"
+    }
+    os.environ.update(default_env_vars_timer)
+
     run_module()

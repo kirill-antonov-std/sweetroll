@@ -1,5 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Optional
 from enum import Enum
 import logging
@@ -11,6 +12,25 @@ class CaptureTrigger(Enum):
     UNKNOWN = None
     TIMER_TRIGGER = "timer"
     DI_TRIGGER = "di"
+
+def check_timer_trigger(config: CameraCaptureConfig) -> bool:
+    ret_val = False
+    new_ts = datetime.now()
+    if (new_ts - check_timer_trigger.old_ts).total_seconds() > config.capture_interval_s:
+        check_timer_trigger.old_ts = new_ts
+        ret_val = True
+    return ret_val
+check_timer_trigger.old_ts = datetime.now()
+
+def check_di_trigger(config: CameraCaptureConfig) -> bool:
+    ret_val = True
+    return ret_val
+
+TRIGGER_CHECKERS = {
+    CaptureTrigger.UNKNOWN: None,
+    CaptureTrigger.TIMER_TRIGGER: check_timer_trigger,
+    CaptureTrigger.DI_TRIGGER: check_di_trigger
+}
 
 @dataclass
 class CameraCaptureConfig:
