@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: camera-capture
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: camera-capture
+  template:
+    metadata:
+      labels:
+        app: camera-capture
+    spec:
+      containers:
+        - name: camera-capture
+          image: antonovk/camera-capture:latest
+          env:
+            - name: CAMERA_HANDLE
+              value: "/dev/sweetroll-camera"
+            - name: CAPTURE_TRIGGER
+              value: "timer"
+            - name: CAPTURE_INTERVAL_S
+              value: "2"
+            - name: IMAGES_DIR
+              value: "/images"
+          volumeMounts:
+            - mountPath: /images
+              name: images
+            - mountPath: /dev/sweetroll-camera
+              name: sweetroll-camera
+          securityContext:
+            privileged: true
+      volumes:
+        - name: images
+          hostPath:
+            path: /tmp/images
+            type: DirectoryOrCreate
+        - name: sweetroll-camera
+          hostPath:
+            path: /dev/sweetroll-camera
+            type: CharDevice
+      restartPolicy: Always

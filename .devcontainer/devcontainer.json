@@ -1,0 +1,28 @@
+{
+    "name": "Face Recognition Dev Container",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "terminal.integrated.defaultProfile.linux": "bash",
+                "python.pythonPath": "/usr/local/bin/python"
+            },
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-azuretools.vscode-docker"
+            ]
+        }
+    },
+    "containerEnv": {
+        "PYTHONPATH": "rpi_app/camera_capture/:"
+    },
+    "postCreateCommand": "pip install --upgrade pip && pip install -r requirements.txt",
+    "mounts": [
+        "source=${localWorkspaceFolder}/.gcp,target=/workspace/.gcp,type=bind"
+    ],
+    "remoteUser": "vscode"
+}
