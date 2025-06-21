@@ -29,10 +29,12 @@ spec:
               name: images
             - mountPath: /dev/sweetroll-camera
               name: sweetroll-camera
+          securityContext:
+            privileged: true
       volumes:
         - name: images
           hostPath:
-            path: ~/images
+            path: /tmp/images
             type: DirectoryOrCreate
         - name: sweetroll-camera
           hostPath:
